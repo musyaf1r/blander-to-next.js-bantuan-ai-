@@ -1,17 +1,24 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Fredoka } from "next/font/google";
+import { Cormorant_Garamond, Nunito, Pacifico } from "next/font/google";
 
-const display = Fredoka({ subsets: ["latin"], variable: "--font-display", weight: ["400", "500", "600", "700"] });
+const script = Pacifico({ weight: "400", subsets: ["latin"], variable: "--font-script" });
+const serif = Cormorant_Garamond({
+  weight: ["500", "600", "700"],
+  style: ["normal", "italic"],
+  subsets: ["latin"],
+  variable: "--font-serif",
+});
+const sans = Nunito({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Thalassa | A voyage into the blue",
-  description: "A cartoon 3D landing page about the sea and marine life.",
+  title: "Thalassa | A field guide to ocean animals",
+  description: "Dive from the surface to the deepest trench and meet every animal at the depth where it really lives.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={display.variable}>
+    <html lang="en" className={`${script.variable} ${serif.variable} ${sans.variable}`}>
       <body>{children}</body>
     </html>
   );
