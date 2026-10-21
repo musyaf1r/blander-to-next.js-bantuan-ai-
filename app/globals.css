@@ -265,3 +265,4 @@ footer {
   }
   .viewer { width: min(300px, 70vw); }
 }
+.readout .zone-name { font-size: 0.75rem; color: var(--aqua); }

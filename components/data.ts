@@ -3,6 +3,18 @@ export const MAX_DEPTH = 10935; // Challenger Deep, meters
 /** Current depth in meters. Written by <Landing /> while you scroll, read by the 3D scene. */
 export const depthStore = { m: 0 };
 
+/** 0..1 position of a depth on the (log) depth ruler. */
+export const depthPct = (d: number) => Math.log10(1 + d / 3) / Math.log10(1 + MAX_DEPTH / 3);
+
+export function zoneOf(d: number) {
+  if (d < 1) return "Surface";
+  if (d < 200) return "Sunlight zone";
+  if (d < 1000) return "Twilight zone";
+  if (d < 4000) return "Midnight zone";
+  if (d < 6000) return "Abyssal zone";
+  return "Hadal zone";
+}
+
 /** Vertical distance between two stops, in world units. Bigger = deeper sea, animals further apart. */
 export const SPACING = 16;
 
@@ -25,21 +37,9 @@ export function camY(d: number) {
   return pts[pts.length - 1].y;
 }
 
-/** 0..1 position of a depth on the (log) depth ruler. */
-export const depthPct = (d: number) => Math.log10(1 + d / 3) / Math.log10(1 + MAX_DEPTH / 3);
-
-export function zoneOf(d: number) {
-  if (d < 1) return "Surface";
-  if (d < 200) return "Sunlight zone";
-  if (d < 1000) return "Twilight zone";
-  if (d < 4000) return "Midnight zone";
-  if (d < 6000) return "Abyssal zone";
-  return "Hadal zone";
-}
-
 export type Station = {
   id: string;
-  depth: number; // meters where this section is centered
+  depth: number; // meters where this section is centered. MUST get bigger down the list.
   name: string;
   latin: string;
   tagline: string;
@@ -80,6 +80,20 @@ export const STATIONS: Station[] = [
     ],
   },
   {
+    id: "tuna",
+    depth: 40,
+    name: "Yellowfin Tuna",
+    latin: "Thunnus albacares",
+    tagline: "A torpedo-shaped speedster of the open ocean.",
+    range: [0, 250],
+    rangeLabel: "0 – 250 m",
+    accent: "#ffd166",
+    facts: [
+      "It never stops swimming: moving water over its gills is how it breathes.",
+      "A yellowfin can sprint at up to roughly 75 km/h.",
+    ],
+  },
+  {
     id: "manta",
     depth: 70,
     name: "Giant Manta Ray",
@@ -108,20 +122,6 @@ export const STATIONS: Station[] = [
     ],
   },
   {
-    id: "tuna",
-    depth: 40,
-    name: "Yellowfin Tuna",
-    latin: "Thunnus albacares",
-    tagline: "A torpedo-shaped speedster of the open ocean.",
-    range: [0, 250],
-    rangeLabel: "0 – 250 m",
-    accent: "#ffd166",
-    facts: [
-      "It never stops swimming: moving water over its gills is how it breathes.",
-      "A yellowfin can sprint at up to roughly 75 km/h.",
-    ],
-  },
-  {
     id: "whale",
     depth: 230,
     name: "Humpback Whale",
@@ -147,20 +147,6 @@ export const STATIONS: Station[] = [
     facts: [
       "Most sharks have five pairs of gill slits; this one has six, and its family goes back to the age of dinosaurs.",
       "It hides in the dark deep by day and rises toward the surface at night to hunt.",
-    ],
-  },
-  {
-    id: "angler",
-    depth: 2500,
-    name: "Deep-sea Anglerfish",
-    latin: "Ceratioidei",
-    tagline: "It fishes with its own lantern in total darkness.",
-    range: [1000, 4000],
-    rangeLabel: "1,000 – 4,000 m",
-    accent: "#7df9ff",
-    facts: [
-      "The glowing lure on its head is lit by bioluminescent bacteria.",
-      "In some species the male is tiny and fuses onto the female's body for life.",
     ],
   },
   {
@@ -206,8 +192,9 @@ export const STATIONS: Station[] = [
     ],
   },
 ];
-/** Which 3D model shows which animal (used by the sea AND the viewer next to each card). Swap files here if a fish is wrong. */
-export const MODELS: Record<string, { file?: string; proc?: "angler" | "snailfish" | "jelly" }> = {
+
+/** Which 3D model shows which animal (sea AND the viewer next to each card). Swap files here if a fish is wrong. */
+export const MODELS: Record<string, { file?: string; proc?: "snailfish" | "jelly" }> = {
   clownfish: { file: "/Fish2.glb" },
   bluetang: { file: "/Fish3.glb" },
   tuna: { file: "/Fish1.glb" },
@@ -215,7 +202,6 @@ export const MODELS: Record<string, { file?: string; proc?: "angler" | "snailfis
   dolphin: { file: "/Dolphin.glb" },
   whale: { file: "/Whale.glb" },
   shark: { file: "/Shark.glb" },
-  angler: { proc: "angler" },
   jellyfish: { proc: "jelly" },
   snailfish: { proc: "snailfish" },
 };

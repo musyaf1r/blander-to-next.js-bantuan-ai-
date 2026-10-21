@@ -34,7 +34,7 @@ const rise: Variants = {
 /* ------------------------------ depth meter ------------------------------ */
 function DepthRail({ depth }: { depth: MotionValue<number> }) {
   const text = useTransform(depth, (d) => `${fmt(d)} m`);
-  const zone = useTransform(depth, (d) => zoneOf(d));
+  const zone = useTransform(depth, (d): string => zoneOf(d));
   const top = useTransform(depth, (d) => `${depthPct(d) * 100}%`);
 
   return (
@@ -42,7 +42,7 @@ function DepthRail({ depth }: { depth: MotionValue<number> }) {
       <div className="readout">
         <span>DEPTH</span>
         <motion.strong>{text}</motion.strong>
-        <motion.em>{zone}</motion.em>
+         <motion.span className="zone-name">{zone}</motion.span>
       </div>
       <div className="line">
         <motion.i className="marker" style={{ top }} />

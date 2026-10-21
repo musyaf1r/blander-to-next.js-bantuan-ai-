@@ -5,7 +5,7 @@ import { useAnimations, useGLTF } from "@react-three/drei";
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
-import { Angler, Snailfish, tidy } from "./Ocean";
+import { Snailfish, tidy } from "./Ocean";
 
 /** Slowly turns whatever is inside, so you can see the animal from every side. */
 function Spin({ children, scale = 1 }: { children: React.ReactNode; scale?: number }) {
@@ -91,7 +91,7 @@ export default function Viewer({
   accent,
 }: {
   file?: string;
-  proc?: "angler" | "snailfish" | "jelly";
+  proc?:  "snailfish" | "jelly";
   accent: string;
 }) {
   return (
@@ -99,13 +99,9 @@ export default function Viewer({
       <ambientLight intensity={1.1} />
       <directionalLight position={[3, 4, 5]} intensity={2.4} />
       <directionalLight position={[-4, 2, -4]} intensity={1.6} color={accent} />
-      <Suspense fallback={null}>
+            <Suspense fallback={null}>
         {file ? (
           <GlbModel file={file} />
-        ) : proc === "angler" ? (
-          <Spin scale={0.8}>
-            <Angler />
-          </Spin>
         ) : proc === "snailfish" ? (
           <Spin scale={0.8}>
             <Snailfish />

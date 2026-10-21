@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useAnimations, useGLTF } from "@react-three/drei";
@@ -13,9 +13,7 @@ const ABYSS = new THREE.Color("#01050f"); // deep
 const SUN_DIR = new THREE.Vector3(0.2, 0.3, -1).normalize();
 const FLOOR = camY(MAX_DEPTH) - 6; // sandy seabed
 
-// Shared between all parts of the scene, updated once per frame in <Dive />
-//  u    = 0 above water -> 1 under water
-//  deep = 0 at the surface -> 1 very deep (follows the REAL depth in meters)
+// u = 0 above water -> 1 under water, deep = 0 surface -> 1 very deep (from the REAL depth in meters)
 const shared = { D: 0, u: 0, deep: 0, fog: new THREE.Color(HAZE) };
 
 const smooth = (a: number, b: number, x: number) => {
@@ -36,19 +34,20 @@ function Sky() {
     }),
     []
   );
+  const mesh = useRef<THREE.Mesh>(null!);
 
-  useFrame(() => {
+ useFrame(({ camera }) => {
+    mesh.current.position.copy(camera.position);
     uniforms.uFog.value.copy(shared.fog);
-    uniforms.uDark.value = shared.u;
+    uniforms.uDark.value = Math.min(1, shared.u * 1.4 + shared.deep * 0.65);
   });
 
   return (
-    <mesh renderOrder={-1}>
-      <sphereGeometry args={[90, 32, 16]} />
+    <mesh ref={mesh} renderOrder={-1} frustumCulled={false}>
+      <sphereGeometry args={[400, 32, 16]} />
       <shaderMaterial
         side={THREE.BackSide}
         depthWrite={false}
-        fog={false}
         uniforms={uniforms}
         vertexShader={/* glsl */ `
           varying vec3 vDir;
@@ -60,13 +59,13 @@ function Sky() {
           uniform vec3 uTop; uniform vec3 uFog; uniform vec3 uSun; uniform float uDark;
           varying vec3 vDir;
           void main() {
-            float h = clamp(vDir.y, 0.0, 1.0);
-            vec3 col = mix(uFog, uTop, pow(h, 0.5));
+            float h = max(vDir.y, 0.0);
+            vec3 sky = mix(uFog, uTop, h * h);
             float s = max(dot(normalize(vDir), uSun), 0.0);
-            col += vec3(1.0, 0.92, 0.75) * pow(s, 12.0) * 0.25;
-            col += vec3(1.0, 0.95, 0.8) * pow(s, 120.0) * 0.9;
-            col = mix(col, uFog, uDark);
-            gl_FragColor = vec4(col, 1.0);
+            sky += pow(s, 200.0) * vec3(1.0, 0.95, 0.7) * 2.5;
+            sky += pow(s, 12.0) * vec3(1.0, 0.85, 0.5) * 0.35;
+            sky = mix(sky, vec3(0.0), uDark);
+            gl_FragColor = vec4(sky, 1.0);
           }`}
       />
     </mesh>
@@ -75,7 +74,7 @@ function Sky() {
 
 function Clouds() {
   const g = useRef<THREE.Group>(null!);
-
+ 
   const tex = useMemo(() => {
     const c = document.createElement("canvas");
     c.width = c.height = 128;
@@ -138,8 +137,10 @@ function Waves() {
     }),
     []
   );
+  const mesh = useRef<THREE.Mesh>(null!);
 
   useFrame(({ clock }) => {
+    mesh.current.visible = shared.deep < 0.6;
     uniforms.uTime.value = clock.elapsedTime;
     uniforms.uFog.value.copy(shared.fog);
     uniforms.uNear.value = 25 - shared.u * 17;
@@ -147,7 +148,7 @@ function Waves() {
   });
 
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1, -60]}>
+    <mesh ref={mesh} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1, -60]}>
       <planeGeometry args={[220, 220, 256, 256]} />
       <shaderMaterial
         side={THREE.DoubleSide}
@@ -202,7 +203,10 @@ function Waves() {
   );
 }
 
+/* ------------------------------- GOD RAYS -------------------------------- */
 function Rays({ count = 9 }: { count?: number }) {
+  const g = useRef<THREE.Group>(null!);
+
   const data = useMemo(
     () =>
       Array.from({ length: count }, () => ({
@@ -242,12 +246,10 @@ function Rays({ count = 9 }: { count?: number }) {
     []
   );
 
-  const g = useRef<THREE.Group>(null!);
-
   useFrame(({ clock, camera }) => {
     mat.uniforms.uTime.value = clock.elapsedTime;
     mat.uniforms.uOp.value = 0.45 * shared.u * (1 - smooth(0.2, 0.7, shared.deep));
-    g.current.position.y = camera.position.y + 10; // rays follow the camera so they are always visible near the surface
+    g.current.position.y = camera.position.y + 10; // rays follow the camera
     g.current.visible = shared.u > 0.02 && shared.deep < 0.75;
   });
 
@@ -291,8 +293,6 @@ function useSprite(kind: "ring" | "soft") {
   }, [kind]);
 }
 
-/** Bubbles rising from the seabed to the surface. */
-/** Bubbles rising around the camera, from the deep up to the surface. */
 function Bubbles({ count, size, speed }: { count: number; size: number; speed: number }) {
   const ref = useRef<THREE.Points>(null!);
   const mat = useRef<THREE.PointsMaterial>(null!);
@@ -334,7 +334,6 @@ function Bubbles({ count, size, speed }: { count: number; size: number; speed: n
   );
 }
 
-/** Marine snow (white) and glowing plankton (cyan) that appear in the dark. */
 function Motes({ count, glow }: { count: number; glow: boolean }) {
   const ref = useRef<THREE.Points>(null!);
   const mat = useRef<THREE.PointsMaterial>(null!);
@@ -392,7 +391,7 @@ function Jellies({ count = 16 }: { count?: number }) {
     () =>
       Array.from({ length: count }, () => ({
         x: rnd(-10, 10),
-               y: yOfStation("jellyfish") + rnd(-5, 5),
+        y: yOfStation("jellyfish") + rnd(-5, 5),
         z: rnd(-16, -3),
         s: rnd(0.45, 1),
         o: Math.random() * Math.PI * 2,
@@ -542,51 +541,7 @@ function Seabed() {
   );
 }
 
-/* ---------------------- HAND-MADE DEEP-SEA ANIMALS ------------------------ */
-/** Anglerfish with a glowing lure. Faces +x. */
-export function Angler() {
-  const lure = useRef<THREE.Mesh>(null!);
-  useFrame(({ clock }) => lure.current.scale.setScalar(1 + Math.sin(clock.elapsedTime * 3) * 0.2));
-
-  return (
-    <group>
-      <mesh scale={[1.1, 0.9, 0.85]}>
-        <sphereGeometry args={[1, 24, 16]} />
-        <meshStandardMaterial color="#2b1d2f" roughness={0.8} />
-      </mesh>
-      <mesh position={[0.8, -0.45, 0]} rotation={[0, 0, -0.3]} scale={[0.85, 0.35, 0.7]}>
-        <sphereGeometry args={[1, 16, 12]} />
-        <meshStandardMaterial color="#1c1220" roughness={0.8} />
-      </mesh>
-      {[-0.4, -0.15, 0.15, 0.4].map((z) => (
-        <mesh key={z} position={[1.55, -0.2, z]} rotation={[0, 0, Math.PI]}>
-          <coneGeometry args={[0.05, 0.22, 5]} />
-          <meshStandardMaterial color="#f4f1e8" />
-        </mesh>
-      ))}
-      {[-0.45, 0.45].map((z) => (
-        <mesh key={z} position={[0.65, 0.35, z]}>
-          <sphereGeometry args={[0.13, 10, 10]} />
-          <meshStandardMaterial color="#f4f1e8" emissive="#d8f6ff" emissiveIntensity={0.4} />
-        </mesh>
-      ))}
-      <mesh position={[0.9, 1.0, 0]} rotation={[0, 0, -0.9]}>
-        <cylinderGeometry args={[0.03, 0.03, 1.2, 6]} />
-        <meshStandardMaterial color="#1c1220" />
-      </mesh>
-      <mesh ref={lure} position={[1.55, 1.45, 0]}>
-        <sphereGeometry args={[0.16, 14, 14]} />
-        <meshBasicMaterial color="#aefaff" fog={false} />
-      </mesh>
-      <pointLight position={[1.55, 1.45, 0]} color="#7df9ff" intensity={6} distance={10} decay={2} />
-      <mesh position={[-1.4, 0, 0]} rotation={[0, 0, Math.PI / 2]} scale={[0.8, 1.1, 0.2]}>
-        <coneGeometry args={[0.7, 1.2, 8]} />
-        <meshStandardMaterial color="#2b1d2f" roughness={0.8} />
-      </mesh>
-    </group>
-  );
-}
-
+/* ------------------------- HAND-MADE SNAILFISH ---------------------------- */
 /** Pale, jelly-soft snailfish. Faces +x. */
 export function Snailfish() {
   const tail = useRef<THREE.Group>(null!);
@@ -628,7 +583,7 @@ export function Snailfish() {
 type Def = {
   id: string; // matches a stop in data.ts (the model comes from MODELS there)
   file?: string;
-  proc?: "angler" | "snailfish";
+  proc?: "snailfish";
   groups: number; // how many separate groups / schools
   per: number; // animals per group
   spread: [number, number, number]; // how loose the school is (x, y, z)
@@ -650,13 +605,12 @@ const BASE: Omit<Def, "file" | "proc">[] = [
   { id: "dolphin", groups: 1, per: 2, spread: [3, 1, 1.5], s: 0.7, yaw: 0, z: [-8, -14], v: [5, 7], gap: [1, 5], w: [0.1, 4] },
   { id: "whale", groups: 1, per: 1, spread: NO_SPREAD, s: 1.5, yaw: 0, z: [-16, -21], v: [2.5, 3.5], gap: [1, 5], w: [0.05, 1.2] },
   { id: "shark", groups: 1, per: 1, spread: NO_SPREAD, s: 0.9, yaw: 0, z: [-9, -14], v: [3, 4.5], gap: [1, 5], w: [0.18, 3] },
-  { id: "angler", groups: 1, per: 1, spread: NO_SPREAD, s: 0.6, yaw: 0, z: [-7, -11], v: [1.2, 2], gap: [1, 5], w: [0.12, 2.5] },
   { id: "snailfish", groups: 2, per: 1, spread: NO_SPREAD, s: 0.5, yaw: 0, z: [-6, -10], v: [0.9, 1.4], gap: [0.5, 4], w: [0.2, 3] },
 ];
 
 const DEFS: Def[] = BASE.map((d) => {
   const m = MODELS[d.id] ?? {};
-  return { ...d, file: m.file, proc: m.proc === "angler" || m.proc === "snailfish" ? m.proc : undefined };
+  return { ...d, file: m.file, proc: m.proc === "snailfish" ? m.proc : undefined };
 });
 
 DEFS.forEach((d) => d.file && useGLTF.preload(d.file));
@@ -760,7 +714,7 @@ function ModelMember({ d, m }: { d: Def; m: Offset }) {
   );
 }
 
-/** One hand-made animal. */
+/** One hand-made animal (the snailfish). */
 function ProcMember({ d, m }: { d: Def; m: Offset }) {
   const ref = useRef<THREE.Group>(null!);
   const model = useRef<THREE.Group>(null!);
@@ -773,7 +727,9 @@ function ProcMember({ d, m }: { d: Def; m: Offset }) {
 
   return (
     <group ref={ref} scale={d.s}>
-      <group ref={model}>{d.proc === "angler" ? <Angler /> : <Snailfish />}</group>
+      <group ref={model}>
+        <Snailfish />
+      </group>
     </group>
   );
 }
@@ -786,7 +742,7 @@ function newTrip(d: Def, wait: number, first: boolean): Trip {
   const halfW = (8 - z) * 1.1 + 4 + d.s * 4; // a bit outside the screen edge
   return {
     x: first ? rnd(-0.45, 0.45) * halfW : -dir * halfW, // the very first trip starts on screen
-    y: yOfStation(d.id) + rnd(-3, 3), // REAL depth -> world height
+    y: yOfStation(d.id) + rnd(-3, 3), // the animal stays around ITS OWN stop
     z,
     dir,
     speed: rnd(d.v[0], d.v[1]),
@@ -829,8 +785,8 @@ function Route({ d }: { d: Def }) {
       return;
     }
 
-    // only draw it while the camera is near its depth
-    g.current.visible = Math.abs(camera.position.y - s.y) < 9.5
+    // only draw it while the camera is near its stop
+    g.current.visible = Math.abs(camera.position.y - s.y) < 9.5;
     g.current.position.set(s.x, s.y + Math.sin(clock.elapsedTime * 0.8) * 0.3, s.z);
     g.current.rotation.y = s.dir > 0 ? 0 : Math.PI;
   });
@@ -858,10 +814,10 @@ function Dive() {
   const lamp = useRef<THREE.PointLight>(null!);
 
   useFrame(({ camera, pointer, scene, clock }) => {
-    const D = depthStore.m; // real depth in meters, from the page
+    const D = depthStore.m; // real depth in meters, written by the page
     shared.D = D;
 
-    // camera follows the depth
+    // the camera follows the depth
     const targetY = camY(D) + pointer.y * 0.5;
     camera.position.x += (pointer.x * 1.5 - camera.position.x) * 0.03;
     camera.position.y += (targetY - camera.position.y) * 0.06;
@@ -869,14 +825,14 @@ function Dive() {
     camera.lookAt(0, camera.position.y - 1.5 - 5 * sea, -10);
     camera.rotateZ(Math.sin(clock.elapsedTime * 0.35) * 0.025);
 
-    // light disappears with REAL depth: ~dark by 1,500 m
+    // light disappears with REAL depth: almost dark by 1,500 m
     const y = camera.position.y;
     const u = smooth(1.0, -2.0, y);
-    const deep = 1 - Math.exp(-D / 450);
+    const deep = 1 - Math.exp(-D / 160);
     shared.u = u;
     shared.deep = deep;
 
-    shared.fog.copy(HAZE).lerp(WATER, u).lerp(ABYSS, Math.pow(deep, 0.85) * 0.98);
+    shared.fog.copy(HAZE).lerp(WATER, u).lerp(ABYSS, Math.pow(deep, 0.7));
 
     const fog = scene.fog as THREE.Fog | null;
     if (fog) {
@@ -884,13 +840,39 @@ function Dive() {
       fog.far = 70 - u * 25 - deep * 20;
     }
 
-    sun.current.visible = u < 0.5;
-    light.current.intensity = 2.4 * (1 - deep) + 0.35;
-    ambient.current.intensity = 0.7 * (1 - deep) + 0.3;
+    // -- sun disc: hide the moment camera enters water ----------------------------
+    sun.current.visible = u < 0.15;
 
-    // the "submarine lamp": switches on when it gets dark
+    // -- directional sunlight: killed as soon as camera goes under ----------------
+    // u=0 surface -> 1 underwater; at u=0.25 sunFade is already 0
+    const sunFade = Math.max(0, 1.0 - u * 4.0) * Math.max(0, 1 - deep * 0.55);
+    light.current.intensity = 2.4 * sunFade;
+    // color shifts warm to blue as depth grows (red absorbed first)
+    light.current.color.setRGB(
+      Math.max(0, 1.0 - deep * 0.85),
+      Math.max(0, 1.0 - deep * 0.50),
+      1.0
+    );
+
+    // -- ambient: sky above + ocean-scatter below (keeps fish visible) ------------
+    // Above water  -> warm sky glow (0.7).
+    // Underwater   -> blue-green scatter, stays usable across dive zones.
+    // Abyss/hadal  -> near 0, properly dark.
+    const skyGlow   = (1 - u) * 0.7;
+    const waterGlow = u * Math.max(0, 0.50 - deep * 0.42);
+    ambient.current.intensity = skyGlow + waterGlow;
+    ambient.current.color.setRGB(
+      Math.max(0.05, 1.0 - u * 0.45 - deep * 0.80),
+      Math.max(0.12, 1.0 - u * 0.15 - deep * 0.50),
+      1.0
+    );
+
+    // -- submarine lamp: on immediately when underwater, main deep-zone light -----
+    // starts early (deep=0.05) so shallow-zone fish also get lamp light.
     lamp.current.position.copy(camera.position);
-    lamp.current.intensity = 450 * smooth(0.25, 0.85, deep);
+    lamp.current.intensity = u > 0.12
+      ? (70 + 420 * smooth(0.05, 0.88, deep)) * (1 - smooth(0.96, 1.0, deep))
+      : 0;
   });
 
   return (
